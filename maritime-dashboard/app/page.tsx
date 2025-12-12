@@ -1,13 +1,17 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useMaritimeStore } from '@/lib/store';
 import VesselList from '@/components/dashboard/vessel-list';
 import MapVisualization from '@/components/map/map-visualization';
 import VesselDrawer from '@/components/dashboard/vessel-drawer';
+import AddShipmentModal from '@/components/dashboard/add-shipment-modal';
+import PortInsights from '@/components/dashboard/port-insights';
+import { subscribeShipments, seedDatabaseIfEmpty, firestoreToVessel, createShipment } from '@/lib/shipments';
+import { fetchRandomUser } from '@/lib/randomUser';
 import { 
   Search, Bell, Settings, List, Map as MapIcon, LayoutDashboard, 
-  AlertTriangle, Filter, Plus, X, BarChart3, TrendingUp, Activity, MapPin
+  AlertTriangle, Filter, Plus, X, BarChart3, TrendingUp, Activity, MapPin, Ship, Download, Check
 } from 'lucide-react';
 
 const NOTIFICATIONS = [
@@ -17,32 +21,101 @@ const NOTIFICATIONS = [
 ];
 
 export default function DashboardPage() {
-  const { viewMode, setViewMode, vessels, selectedVesselId, selectVessel } = useMaritimeStore();
+  const { viewMode, setViewMode, vessels, selectedVesselId, selectVessel, setVessels, userProfile, setUserProfile } = useMaritimeStore();
   const [activePage, setActivePage] = useState('tracking');
   const [searchQuery, setSearchQuery] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showAddShipmentModal, setShowAddShipmentModal] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+
+  // Initialize Firebase with static user profile
+  useEffect(() => {
+    // Set static user profile
+    setUserProfile({
+      name: "McLarens Logistics",
+      email: "admin@mclarens-logistics.com",
+      avatar: "https://ui-avatars.com/api/?name=McLarens+Logistics&background=2563eb&color=fff&bold=true"
+    });
+
+    // Seed database if empty
+    seedDatabaseIfEmpty().catch(console.error);
+
+    // Subscribe to realtime shipments
+    const unsubscribe = subscribeShipments((firestoreShipments) => {
+      const vesselsData = firestoreShipments.map(firestoreToVessel);
+      setVessels(vesselsData);
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [setVessels, setUserProfile]);
 
   const selectedVessel = vessels.find(v => v.id === selectedVesselId);
 
   const filteredVessels = useMemo(() => {
-    if (!searchQuery) return vessels;
-    const q = searchQuery.toLowerCase();
-    return vessels.filter(v => 
-      v.name.toLowerCase().includes(q) ||
-      v.containerId.toLowerCase().includes(q) ||
-      v.imo.toLowerCase().includes(q) ||
-      v.pol.code.toLowerCase().includes(q) ||
-      v.pod.code.toLowerCase().includes(q)
-    );
-  }, [searchQuery, vessels]);
+    let filtered = vessels;
+    
+    // Apply search filter
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(v => 
+        v.name.toLowerCase().includes(q) ||
+        v.containerId.toLowerCase().includes(q) ||
+        v.imo.toLowerCase().includes(q) ||
+        v.pol.code.toLowerCase().includes(q) ||
+        v.pod.code.toLowerCase().includes(q)
+      );
+    }
+    
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(v => {
+        if (statusFilter === 'ontime') return v.voyageStatus === 'On Time';
+        if (statusFilter === 'delayed') return v.etaDelta !== 'On Time' && v.etaDelta !== '+0d';
+        if (statusFilter === 'critical') return v.voyageStatus === 'Critical';
+        return true;
+      });
+    }
+    
+    return filtered;
+  }, [searchQuery, vessels, statusFilter]);
 
   // KPI calculations
   const kpis = useMemo(() => ({
-    total: vessels.length,
-    onTime: vessels.filter(v => v.voyageStatus === 'On Time').length,
-    delayed: vessels.filter(v => v.etaDelta !== 'On Time' && v.etaDelta !== '+0d').length,
-    critical: vessels.filter(v => v.voyageStatus === 'Critical').length
-  }), [vessels]);
+    total: filteredVessels.length,
+    onTime: filteredVessels.filter(v => v.voyageStatus === 'On Time').length,
+    delayed: filteredVessels.filter(v => v.etaDelta !== 'On Time' && v.etaDelta !== '+0d').length,
+    critical: filteredVessels.filter(v => v.voyageStatus === 'Critical').length
+  }), [filteredVessels]);
+
+  const handleExportCSV = () => {
+    const headers = ['Vessel Name', 'IMO', 'Container ID', 'POL', 'POD', 'ETA', 'Status', 'Risk Score'];
+    const rows = filteredVessels.map(v => [
+      v.name,
+      v.imo,
+      v.containerId,
+      v.pol.code,
+      v.pod.code,
+      v.eta,
+      v.voyageStatus,
+      v.riskScore
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `shipments_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
 
   return (
     <main className="flex flex-col h-screen w-screen bg-[#F5F7FA] overflow-hidden font-sans text-slate-800">
@@ -147,9 +220,19 @@ export default function DashboardPage() {
           </button>
           
           <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
-            <div className="w-9 h-9 bg-slate-200 rounded-full overflow-hidden border border-slate-300">
-              <img src="https://i.pravatar.cc/150?u=user" alt="Profile" className="w-full h-full object-cover" />
-            </div>
+            {userProfile ? (
+              <>
+                <div className="hidden md:block text-right">
+                  <div className="text-sm font-medium text-slate-800">{userProfile.name}</div>
+                  <div className="text-xs text-slate-500">{userProfile.email}</div>
+                </div>
+                <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-slate-300 shadow-sm">
+                  <img src={userProfile.avatar} alt={userProfile.name} className="w-full h-full object-cover" />
+                </div>
+              </>
+            ) : (
+              <div className="w-9 h-9 bg-slate-200 rounded-full animate-pulse"></div>
+            )}
           </div>
         </div>
       </header>
@@ -168,10 +251,24 @@ export default function DashboardPage() {
             {viewMode === 'map' && <VesselDrawer />}
 
             {/* List View (Bottom Sheet) - Visible in List Mode */}
-            {viewMode === 'list' && <VesselList />}
+            {viewMode === 'list' && (
+              <VesselList 
+                onExportCSV={handleExportCSV}
+                onAddShipment={() => setShowAddShipmentModal(true)}
+                onFilterChange={setStatusFilter}
+                currentFilter={statusFilter}
+              />
+            )}
             
-            {/* View Toggle FAB */}
-            <div className="absolute bottom-8 right-8 z-50">
+            {/* Action Buttons */}
+            <div className="absolute bottom-8 right-8 z-50 flex flex-col gap-3">
+              <button 
+                onClick={() => setShowAddShipmentModal(true)}
+                className="bg-blue-600 text-white p-4 rounded-full shadow-xl hover:bg-blue-700 transition-all hover:scale-105 flex items-center gap-2 font-bold"
+                title="Add Shipment"
+              >
+                <Ship size={20} />
+              </button>
               <button 
                 onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
                 className="bg-slate-900 text-white p-4 rounded-full shadow-xl hover:bg-slate-700 transition-all hover:scale-105 flex items-center gap-2 font-bold"
@@ -179,6 +276,12 @@ export default function DashboardPage() {
                 {viewMode === 'map' ? <><List size={20} /> List View</> : <><MapIcon size={20} /> Map View</>}
               </button>
             </div>
+
+            {/* Add Shipment Modal */}
+            <AddShipmentModal 
+              isOpen={showAddShipmentModal}
+              onClose={() => setShowAddShipmentModal(false)}
+            />
           </>
         ) : activePage === 'analytics' ? (
           <div className="p-8 h-full overflow-y-auto bg-slate-50 w-full">
@@ -249,14 +352,18 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+        ) : activePage === 'ports' ? (
+          <div className="h-full w-full">
+            <PortInsights />
+          </div>
         ) : (
           <div className="p-8 h-full overflow-y-auto bg-slate-50 w-full">
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-slate-800">Port Insights</h2>
-              <p className="text-slate-500">Global congestion analysis</p>
+              <h2 className="text-2xl font-bold text-slate-800">Analytics</h2>
+              <p className="text-slate-500">Coming soon</p>
             </div>
             <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
-              <p className="text-slate-500 text-center py-12">Port insights view - Coming soon</p>
+              <p className="text-slate-500 text-center py-12">Advanced analytics view - In development</p>
             </div>
           </div>
         )}

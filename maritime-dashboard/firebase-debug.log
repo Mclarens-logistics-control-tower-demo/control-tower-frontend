@@ -1,0 +1,22 @@
+[debug] [2025-12-12T15:50:29.150Z] ----------------------------------------------------------------------
+[debug] [2025-12-12T15:50:29.154Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Sahan\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init
+[debug] [2025-12-12T15:50:29.154Z] CLI Version:   15.0.0
+[debug] [2025-12-12T15:50:29.154Z] Platform:      win32
+[debug] [2025-12-12T15:50:29.155Z] Node Version:  v22.14.0
+[debug] [2025-12-12T15:50:29.155Z] Time:          Fri Dec 12 2025 21:20:29 GMT+0530 (India Standard Time)
+[debug] [2025-12-12T15:50:29.155Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-12-12T15:50:29.158Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  E:\mclarens-control-tower\control-tower-frontend\maritime-dashboard
+
+[debug] [2025-12-12T15:50:31.949Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2025-12-12T15:50:31.950Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}

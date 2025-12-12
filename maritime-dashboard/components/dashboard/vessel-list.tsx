@@ -1,10 +1,38 @@
 "use client";
 import { useMaritimeStore } from '@/lib/store';
-import { Search, Filter, AlertTriangle, Download, Plus, MoreHorizontal, Anchor } from 'lucide-react';
+import { Search, Filter, AlertTriangle, Download, Plus, MoreHorizontal, Anchor, Check, Trash2 } from 'lucide-react';
 import { cn } from '@/components/ui/card';
+import { useState } from 'react';
+import { removeShipment } from '@/lib/shipments';
 
-export default function VesselList() {
+interface VesselListProps {
+  onExportCSV?: () => void;
+  onAddShipment?: () => void;
+  onFilterChange?: (filter: string) => void;
+  currentFilter?: string;
+}
+
+export default function VesselList({ onExportCSV, onAddShipment, onFilterChange, currentFilter = 'all' }: VesselListProps) {
   const { vessels, selectVessel, selectedVesselId, setViewMode } = useMaritimeStore();
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  const filters = [
+    { value: 'all', label: 'All Shipments' },
+    { value: 'ontime', label: 'On Time' },
+    { value: 'delayed', label: 'Delayed' },
+    { value: 'critical', label: 'Critical' }
+  ];
+
+  const handleDelete = async (id: string) => {
+    try {
+      await removeShipment(id);
+      setDeleteConfirm(null);
+    } catch (error) {
+      console.error('Failed to delete shipment:', error);
+      alert('Failed to delete shipment. Please try again.');
+    }
+  };
 
   return (
     <div className="absolute inset-x-0 bottom-0 top-[15%] bg-white/95 backdrop-blur-sm shadow-[0_-10px_40px_rgba(0,0,0,0.08)] rounded-t-3xl z-40 flex flex-col animate-in slide-in-from-bottom-10 duration-500 border-t border-slate-200">
@@ -16,20 +44,42 @@ export default function VesselList() {
          </div>
          <div className="flex items-center gap-3">
             <div className="relative">
-               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-               <input 
-                 type="text" 
-                 placeholder="Search in list" 
-                 className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-64"
-               />
+              <button 
+                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 text-slate-700"
+              >
+                <Filter size={16} /> 
+                {filters.find(f => f.value === currentFilter)?.label || 'Filter'}
+              </button>
+              {showFilterDropdown && (
+                <div className="absolute left-0 top-full mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-100 py-1 z-50">
+                  {filters.map(filter => (
+                    <button
+                      key={filter.value}
+                      onClick={() => {
+                        onFilterChange?.(filter.value);
+                        setShowFilterDropdown(false);
+                      }}
+                      className="w-full px-4 py-2 text-left hover:bg-slate-50 flex items-center justify-between text-sm"
+                    >
+                      <span>{filter.label}</span>
+                      {currentFilter === filter.value && <Check size={16} className="text-blue-600" />}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <button className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 text-slate-700">
-               <Filter size={16} /> Filter
-            </button>
-            <button className="p-2 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50">
+            <button 
+              onClick={onExportCSV}
+              className="p-2 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50"
+              title="Export to CSV"
+            >
                <Download size={18} />
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-lg shadow-blue-500/20">
+            <button 
+              onClick={onAddShipment}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-lg shadow-blue-500/20"
+            >
                <Plus size={16} /> Add Shipment
             </button>
          </div>
@@ -43,7 +93,8 @@ export default function VesselList() {
          <div className="col-span-2">Vessel</div>
          <div className="col-span-2">POL / POD</div>
          <div className="col-span-2">Maritime AI™ ETA</div>
-         <div className="col-span-2">Route Status</div>
+         <div className="col-span-1">Route Status</div>
+         <div className="col-span-1">Actions</div>
       </div>
 
       {/* Table Rows */}
@@ -76,7 +127,7 @@ export default function VesselList() {
                   {ship.eta.split(' ')[0]}
                   {ship.etaDelta !== 'On Time' && <div className="text-xs text-red-600 font-normal mt-0.5">{ship.etaDelta} late</div>}
                </div>
-               <div className="col-span-2">
+               <div className="col-span-1">
                   {ship.voyageStatus !== 'On Time' ? (
                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         ship.voyageStatus === 'Critical' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'
@@ -87,6 +138,32 @@ export default function VesselList() {
                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-600">
                         On Schedule
                      </span>
+                  )}
+               </div>
+               <div className="col-span-1" onClick={(e) => e.stopPropagation()}>
+                  {deleteConfirm === ship.id ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleDelete(ship.id)}
+                        className="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(null)}
+                        className="text-xs px-2 py-1 bg-slate-200 text-slate-700 rounded hover:bg-slate-300"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setDeleteConfirm(ship.id)}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete shipment"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   )}
                </div>
             </div>
